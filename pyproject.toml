@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "argus-audit"
+version = "0.1.0"
+description = "Scope-gated white-hat security audit + pentest orchestrator. Stdlib-only, self-updating intel layer (NVD/KEV/EPSS), 5 scanner modules."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "mturac", email = "mehmetturac@gmail.com"}]
+keywords = ["security", "pentest", "audit", "static-analysis", "supply-chain", "claude-code"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []  # stdlib only at runtime
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/mturac/pluginpool-argus-audit"
+Repository = "https://github.com/mturac/pluginpool-argus-audit"
+Issues = "https://github.com/mturac/pluginpool-argus-audit/issues"
+Changelog = "https://github.com/mturac/pluginpool-argus-audit/releases"
+
+[project.scripts]
+argus = "argus.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "scripts"}
+
+[tool.setuptools.packages.find]
+where = ["scripts"]
+include = ["argus*"]
