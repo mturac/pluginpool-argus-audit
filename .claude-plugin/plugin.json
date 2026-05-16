@@ -1,0 +1,6 @@
+{
+  "name": "argus-audit",
+  "version": "0.1.0",
+  "description": "White-hat security audit + pentest orchestrator. Scope-gated, self-updating, stdlib-only.",
+  "author": "pluginpool"
+}
