@@ -69,7 +69,7 @@ def _audit_host(host: str, port: int) -> Iterable[Finding]:
     if not_after:
         try:
             exp = _parse_cert_not_after(not_after)
-            days_left = (exp - datetime.datetime.utcnow()).days
+            days_left = (exp - datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)).days
         except ValueError:
             days_left = None
         if days_left is not None:

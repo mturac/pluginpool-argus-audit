@@ -66,6 +66,49 @@ def _looks_like_db_receiver(node: ast.expr) -> bool:
     return tail.lower() in _sql_receivers()
 
 
+# Each rule's short-name (e.g. ``loads``) MUST belong to the listed module's
+# namespace to count as a true hit. Plain identifiers (``eval``, ``exec``) have
+# no module prefix — they're Python builtins, so we trust the bare match.
+_DANGEROUS_CALLS_HEAD: dict[str, str | None] = {
+    "eval": None,
+    "exec": None,
+    "system": "os",
+    "popen": "os",
+    "loads": "pickle",
+    "load": "pickle",
+    "unsafe_load": "yaml",
+    "full_load": "yaml",
+    "getoutput": "subprocess",
+    "getstatusoutput": "subprocess",
+    "md5": "hashlib",
+    "sha1": "hashlib",
+}
+
+
+def qualified_head(node: ast.expr) -> str:
+    """Return the leftmost identifier of a call's func expression."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    if isinstance(node, ast.Name):
+        return node.id
+    return ""
+
+
+def _yaml_load_has_safe_loader(node: ast.Call) -> bool:
+    """``yaml.load(stream, Loader=yaml.SafeLoader)`` is safe — don't flag it."""
+    for kw in node.keywords:
+        if kw.arg == "Loader" and isinstance(kw.value, ast.Attribute):
+            if kw.value.attr in {"SafeLoader", "CSafeLoader"}:
+                return True
+    # Positional Loader argument (yaml.load(stream, SafeLoader))
+    if len(node.args) >= 2 and isinstance(node.args[1], (ast.Attribute, ast.Name)):
+        a = node.args[1]
+        name = a.attr if isinstance(a, ast.Attribute) else a.id
+        if name in {"SafeLoader", "CSafeLoader"}:
+            return True
+    return False
+
+
 def _is_sql_string_built_dynamically(node: ast.expr) -> bool:
     """True when ``node`` is the kind of expression that breeds SQL injection.
 
@@ -160,7 +203,22 @@ def _scan_source(source: str, file_path: str) -> Iterable[Finding]:
         def visit_Call(self, node: ast.Call) -> None:
             name = _resolve_call_name(node.func, aliases)
             short = name.rsplit(".", 1)[-1] if "." in name else name
-            rule = _DANGEROUS_CALLS.get(name) or _DANGEROUS_CALLS.get(short)
+            # Only match dangerous calls if either:
+            #   (a) the fully-qualified name exactly matches a rule, OR
+            #   (b) the short name matches AND the alias map confirms the head
+            #       binding maps to the expected module (no false positives for
+            #       unrelated ``my_obj.eval()`` / ``logger.system()``).
+            rule = _DANGEROUS_CALLS.get(name)
+            if not rule and short in _DANGEROUS_CALLS:
+                head = qualified_head(node.func)
+                expected_prefix = _DANGEROUS_CALLS_HEAD.get(short)
+                if expected_prefix is None or (head and aliases.get(head, head).split(".", 1)[0] == expected_prefix):
+                    rule = _DANGEROUS_CALLS[short]
+            if rule:
+                rid, title, sev, cwe, fix = rule
+                # yaml.load(...) with an explicit non-default Loader= is safe.
+                if rid == "argus.static.python.yaml_load" and _yaml_load_has_safe_loader(node):
+                    rule = None
             if rule:
                 rid, title, sev, cwe, fix = rule
                 findings.append(Finding(
@@ -206,7 +264,7 @@ def _scan_source(source: str, file_path: str) -> Iterable[Finding]:
             # ``sql``/``query``/``statement`` (some libraries take the SQL by
             # keyword) and we recognise both f-string concat and the
             # ``"...{}".format(x)`` pattern.
-            if (short in {"execute", "query"}
+            if (short in {"execute", "executemany", "query"}
                     and isinstance(node.func, ast.Attribute)
                     and _looks_like_db_receiver(node.func.value)):
                 # Build the list of candidate SQL-carrying arguments.
